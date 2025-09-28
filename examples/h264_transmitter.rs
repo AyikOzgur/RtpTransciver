@@ -79,21 +79,20 @@ fn extract_nal(input_buffer: &[u8]) -> Option<(&[u8], bool)> {
     for index in nal_start_index + start_code..input_buffer.len() - MAX_START_CODE_LENGTH {
         if input_buffer[index] == 0 && input_buffer[index + 1] == 0 && input_buffer[index + 2] == 1
         {
-            start_code = 3;
+            // Check if we found a valid nal.
+            is_end_found = true;
+            nal_end_index = index;
+            break;
         } else if input_buffer[index] == 0
             && input_buffer[index + 1] == 0
             && input_buffer[index + 2] == 0
             && input_buffer[index + 3] == 1
         {
-            start_code = 4;
-        } else {
-            continue;
+            // Check if we found a valid nal.
+            is_end_found = true;
+            nal_end_index = index;
+            break;
         }
-
-        // Check if we found a valid nal.
-        is_end_found = true;
-        nal_end_index = index;
-        break;
     }
 
     if is_start_found && is_end_found {

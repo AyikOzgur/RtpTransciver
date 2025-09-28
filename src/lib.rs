@@ -80,11 +80,11 @@ impl H264RtpPusher {
             self.send_rtp_over_udp();
         } else {
             const FU_A_SIZE: usize = 2;
-            let mut FU_A: [u8; FU_A_SIZE] = [0u8; FU_A_SIZE];
+            let mut fu_a: [u8; FU_A_SIZE] = [0u8; FU_A_SIZE];
             // Set FU indicator type to FU-A
-            FU_A[0] |= 28;
+            fu_a[0] |= 28;
             // Set F bit to 0
-            FU_A[0] &= !(1 << 7);
+            fu_a[0] &= !(1 << 7);
 
             let nri_value = match nal_type {
                 H264NalType::Sps |
@@ -99,15 +99,15 @@ impl H264RtpPusher {
             };
 
             // Set the NRI bits to the desired value
-            FU_A[0] |= nri_value << 5;
+            fu_a[0] |= nri_value << 5;
             // Set FU header type with inputFrameType
-            FU_A[1] |= nal_type as u8;
+            fu_a[1] |= nal_type as u8;
             // Set reserved bit (bit 5) to 0
-            FU_A[1] &= !(1 << 5);
+            fu_a[1] &= !(1 << 5);
             // Set start bit to 1
-            FU_A[1] |= 1 << 7;
+            fu_a[1] |= 1 << 7;
             // Set end bit to 0
-            FU_A[1] &= !(1 << 6);
+            fu_a[1] &= !(1 << 6);
 
             // Skip the original header.
             let mut remaining_nal = &nal_buf[1..];
@@ -116,7 +116,7 @@ impl H264RtpPusher {
                 self.rtp_buffer_size = RTP_HEADER_SIZE + MAX_RTP_BUF_SIZE;
                 self.rtp_is_last = false;
 
-                self.rtp_buffer[RTP_HEADER_SIZE..RTP_HEADER_SIZE + FU_A.len()].copy_from_slice(&FU_A);
+                self.rtp_buffer[RTP_HEADER_SIZE..RTP_HEADER_SIZE + fu_a.len()].copy_from_slice(&fu_a);
 
                 let packet_size = MAX_RTP_BUF_SIZE - FU_A_SIZE;
                 self.rtp_buffer[RTP_HEADER_SIZE + FU_A_SIZE..RTP_HEADER_SIZE + FU_A_SIZE + packet_size].copy_from_slice(&remaining_nal[..packet_size]);
@@ -127,7 +127,7 @@ impl H264RtpPusher {
                 remaining_nal = &remaining_nal[packet_size..];
 
                 // Set start bit to 0
-                FU_A[1] &= !(1 << 7);
+                fu_a[1] &= !(1 << 7);
             }
 
             // Last packet.
@@ -135,9 +135,9 @@ impl H264RtpPusher {
             self.rtp_is_last = true;
             
             // Set end bit to 1. This is the last packet in the frame.
-            FU_A[1] |= 1 << 6;
+            fu_a[1] |= 1 << 6;
             
-            self.rtp_buffer[RTP_HEADER_SIZE..RTP_HEADER_SIZE + FU_A.len()].copy_from_slice(&FU_A);
+            self.rtp_buffer[RTP_HEADER_SIZE..RTP_HEADER_SIZE + fu_a.len()].copy_from_slice(&fu_a);
             self.rtp_buffer[RTP_HEADER_SIZE + FU_A_SIZE..RTP_HEADER_SIZE + FU_A_SIZE + remaining_nal.len()].copy_from_slice(&remaining_nal); // this is the line
 
             // Send Rtp over udp.
@@ -173,7 +173,7 @@ impl H264RtpPusher {
 
         self.rtp_buffer[..RTP_HEADER_SIZE].copy_from_slice(&rtp_header_buffer);
 
-        self.socket.send_to(&self.rtp_buffer[..self.rtp_buffer_size], self.destination_address.clone());
+        let _ = self.socket.send_to(&self.rtp_buffer[..self.rtp_buffer_size], self.destination_address.clone());
 
         // This delay should be calculated based on network bandwidth in a real case usage.
         //thread::sleep(Duration::from_millis(10)); 
