@@ -65,10 +65,9 @@ fn extract_nal(input_buffer: &[u8]) -> Option<(&[u8], bool)> {
         } else {
             continue;
         }
-        nal_start_index = index;
+        nal_start_index = index; // Keep start code because library expects Nals with start code.
         is_start_found = true;
         break;
-
     }
 
     // If there is no start, no need to look for next one.

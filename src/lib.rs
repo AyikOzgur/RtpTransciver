@@ -1,7 +1,5 @@
 use std::{net::UdpSocket};
 use std::time::{SystemTime, UNIX_EPOCH};
-use std::thread;
-use std::time::Duration;
 const MAX_RTP_BUF_SIZE: usize = 1400;
 const RTP_HEADER_SIZE: usize = 12;
 
@@ -33,7 +31,6 @@ pub struct H264RtpPusher {
     rtp_buffer: [u8; 2048],
     rtp_buffer_size: usize,
     rtp_ts: u32,
-    rtp_type: u8,
     rtp_seq: u16,
     rtp_is_last: bool
 }
@@ -47,7 +44,6 @@ impl H264RtpPusher {
             rtp_buffer: [0u8; 2048],
             rtp_buffer_size : 0,
             rtp_ts: 0,
-            rtp_type: 0,
             rtp_seq: 0,
             rtp_is_last: false
         }
@@ -57,7 +53,7 @@ impl H264RtpPusher {
         let mut remaining = frame_buffer;
         loop {
             match get_nal(remaining) {
-                Some((nal_type, nal_buf, is_last)) => {
+                Some((nal_type, nal_buf, _is_last)) => {
                     self.handle_nal(nal_buf, nal_type);
                     remaining = &remaining[nal_buf.len()..];
                 }
@@ -146,7 +142,6 @@ impl H264RtpPusher {
 
             // Send Rtp over udp.
             self.send_rtp_over_udp();
-
         }
     }
 
