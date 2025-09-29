@@ -12,7 +12,7 @@ fn main() {
         }
     };
 
-    let mut pusher = H264RtpPusher::new(String::from("127.0.0.1:7032"));
+    let mut pusher = H264RtpPusher::new("127.0.0.1:7032");
 
     let mut buffer: Vec<u8> = Vec::new();
     let _ = file.read_to_end(&mut buffer);
@@ -24,10 +24,9 @@ fn main() {
         match extract_nal(remaining) {
             Some((nal_buf, is_last)) => {
                 remaining = &remaining[nal_buf.len()..];
-
                 println!("Nal found with size : {}", nal_buf.len());
                 pusher.send_frame(nal_buf);
-                thread::sleep(Duration::from_millis(40));
+                thread::sleep(Duration::from_millis(33));
 
                 if is_last {
                     println!("Last nal");

@@ -36,11 +36,11 @@ pub struct H264RtpPusher {
 }
 
 impl H264RtpPusher {
-    pub fn new(destination: String) -> Self {
+    pub fn new(destination: &str) -> Self {
         let socket = UdpSocket::bind("127.0.0.1:1234").unwrap();
         Self {
             socket: socket,
-            destination_address: destination,
+            destination_address: destination.to_string(),
             rtp_buffer: [0u8; 2048],
             rtp_buffer_size : 0,
             rtp_ts: 0,
@@ -173,11 +173,10 @@ impl H264RtpPusher {
 
         self.rtp_buffer[..RTP_HEADER_SIZE].copy_from_slice(&rtp_header_buffer);
 
-        let _ = self.socket.send_to(&self.rtp_buffer[..self.rtp_buffer_size], self.destination_address.clone());
+        let _ = self.socket.send_to(&self.rtp_buffer[..self.rtp_buffer_size], &self.destination_address);
 
         // This delay should be calculated based on network bandwidth in a real case usage.
         //thread::sleep(Duration::from_millis(10)); 
-
     }
 
     fn get_timestamp(&self) -> u32 {
