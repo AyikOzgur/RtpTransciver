@@ -1,3 +1,4 @@
+use std::thread::panicking;
 use std::{net::UdpSocket};
 use std::time::{SystemTime, UNIX_EPOCH};
 const MAX_RTP_BUF_SIZE: usize = 1400;
@@ -81,67 +82,63 @@ impl H264RtpPusher {
         } else {
             const FU_A_SIZE: usize = 2;
             let mut fu_a: [u8; FU_A_SIZE] = [0u8; FU_A_SIZE];
-            // Set FU indicator type to FU-A
-            fu_a[0] |= 28;
-            // Set F bit to 0
-            fu_a[0] &= !(1 << 7);
 
-            let nri_value = match nal_type {
-                H264NalType::Sps |
-                H264NalType::Pps | 
-                H264NalType::Idr | 
-                H264NalType::NonIdr => {
-                    3
-                } 
-                _ => {
-                    0
-                }
-            };
+            // Original NAL header
+            let nal_header = nal_buf[0];
 
-            // Set the NRI bits to the desired value
-            fu_a[0] |= nri_value << 5;
-            // Set FU header type with inputFrameType
-            fu_a[1] |= nal_type as u8;
-            // Set reserved bit (bit 5) to 0
-            fu_a[1] &= !(1 << 5);
-            // Set start bit to 1
+            // FU Indicator:
+            // - copy F (bit 7) and NRI (bits 5–6)
+            // - set type to 28 (FU-A)
+            fu_a[0] = (nal_header & 0b1110_0000) | 28;
+
+            // FU Header:
+            // - start with type = original NAL type (lower 5 bits)
+            fu_a[1] = nal_header & 0b0001_1111;
+
+            // Set Start bit = 1, End bit = 0
             fu_a[1] |= 1 << 7;
-            // Set end bit to 0
             fu_a[1] &= !(1 << 6);
 
-            // Skip the original header.
+            // Skip original NAL header (we’re fragmenting its payload only)
             let mut remaining_nal = &nal_buf[1..];
 
-            while remaining_nal.len() + FU_A_SIZE >= MAX_RTP_BUF_SIZE {
-                self.rtp_buffer_size = RTP_HEADER_SIZE + MAX_RTP_BUF_SIZE;
-                self.rtp_is_last = false;
+            while !remaining_nal.is_empty() {
+                // Available size for fragment payload = max buffer - RTP header - FU-A header
+                let packet_size = std::cmp::min(
+                    remaining_nal.len(),
+                    MAX_RTP_BUF_SIZE - RTP_HEADER_SIZE - FU_A_SIZE,
+                );
 
-                self.rtp_buffer[RTP_HEADER_SIZE..RTP_HEADER_SIZE + fu_a.len()].copy_from_slice(&fu_a);
+                // Check if this is the last packet
+                if packet_size == remaining_nal.len() {
+                    fu_a[1] |= 1 << 6; // End bit = 1
+                    self.rtp_is_last = true;
+                } else {
+                    fu_a[1] &= !(1 << 6); // End bit = 0
+                    self.rtp_is_last = false;
+                }
 
-                let packet_size = MAX_RTP_BUF_SIZE - FU_A_SIZE;
-                self.rtp_buffer[RTP_HEADER_SIZE + FU_A_SIZE..RTP_HEADER_SIZE + FU_A_SIZE + packet_size].copy_from_slice(&remaining_nal[..packet_size]);
+                // Total RTP payload = FU-A header + fragment
+                self.rtp_buffer_size = RTP_HEADER_SIZE + FU_A_SIZE + packet_size;
 
-                // Send rtp over udp
+                // Copy FU-A header
+                self.rtp_buffer[RTP_HEADER_SIZE..RTP_HEADER_SIZE + FU_A_SIZE]
+                    .copy_from_slice(&fu_a);
+
+                // Copy fragment data
+                self.rtp_buffer[RTP_HEADER_SIZE + FU_A_SIZE
+                    ..RTP_HEADER_SIZE + FU_A_SIZE + packet_size]
+                    .copy_from_slice(&remaining_nal[..packet_size]);
+
+                // Send RTP packet
                 self.send_rtp_over_udp();
 
+                // Advance remaining NAL data
                 remaining_nal = &remaining_nal[packet_size..];
 
-                // Set start bit to 0
+                // Clear Start bit after first packet
                 fu_a[1] &= !(1 << 7);
             }
-
-            // Last packet.
-            self.rtp_buffer_size = RTP_HEADER_SIZE + FU_A_SIZE + remaining_nal.len();
-            self.rtp_is_last = true;
-            
-            // Set end bit to 1. This is the last packet in the frame.
-            fu_a[1] |= 1 << 6;
-            
-            self.rtp_buffer[RTP_HEADER_SIZE..RTP_HEADER_SIZE + fu_a.len()].copy_from_slice(&fu_a);
-            self.rtp_buffer[RTP_HEADER_SIZE + FU_A_SIZE..RTP_HEADER_SIZE + FU_A_SIZE + remaining_nal.len()].copy_from_slice(&remaining_nal); // this is the line
-
-            // Send Rtp over udp.
-            self.send_rtp_over_udp();
         }
     }
 
